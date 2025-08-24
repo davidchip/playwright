@@ -70,6 +70,7 @@ commandWithOpenOptions('codegen [url]', 'open page and generate code for user ac
       ['-o, --output <file name>', 'saves the generated script to a file'],
       ['--target <language>', `language to generate, one of javascript, playwright-test, python, python-async, python-pytest, csharp, csharp-mstest, csharp-nunit, java, java-junit`, codegenId()],
       ['--test-id-attribute <attributeName>', 'use the specified attribute to generate data test ID selectors'],
+      ['--after <dependencies...>', 'run these test files before recording to continue from their final state'],
     ]).action(async function(url, options) {
   await codegen(options, url);
 }).addHelpText('afterAll', `
@@ -77,7 +78,8 @@ Examples:
 
   $ codegen
   $ codegen --target=python
-  $ codegen -b webkit https://example.com`);
+  $ codegen -b webkit https://example.com
+  $ codegen --after test-login.spec.ts http://localhost:3000/dashboard`);
 
 function suggestedBrowsersToInstall() {
   return registry.executables().filter(e => e.installType !== 'none' && e.type !== 'tool').map(e => e.name).join(', ');
@@ -608,8 +610,8 @@ async function open(options: Options, url: string | undefined) {
   await openPage(context, url);
 }
 
-async function codegen(options: Options & { target: string, output?: string, testIdAttribute?: string }, url: string | undefined) {
-  const { target: language, output: outputFile, testIdAttribute: testIdAttributeName } = options;
+async function codegen(options: Options & { target: string, output?: string, testIdAttribute?: string, after?: string[] }, url: string | undefined) {
+  const { target: language, output: outputFile, testIdAttribute: testIdAttributeName, after: dependencies } = options;
   const tracesDir = path.join(os.tmpdir(), `playwright-recorder-trace-${Date.now()}`);
   const { context, browser, launchOptions, contextOptions, closeBrowser } = await launchContext(options, {
     headless: !!process.env.PWTEST_CLI_HEADLESS,
@@ -619,6 +621,138 @@ async function codegen(options: Options & { target: string, output?: string, tes
   const donePromise = new ManualPromise<void>();
   maybeSetupTestHooks(browser, closeBrowser, donePromise);
   dotenv.config({ path: 'playwright.env' });
+
+  // Execute dependency tests if specified
+  if (dependencies && dependencies.length > 0) {
+    console.log('🔄 Running dependency tests before recording...');
+    
+    // Create a new page in the same context for dependency execution
+    const page = await context.newPage();
+    
+    // Show a visual indicator during dependency execution
+    await page.evaluate(() => {
+      const banner = document.createElement('div');
+      banner.id = '__playwright_dependency_banner';
+      banner.textContent = 'Running dependency tests...';
+      banner.style.cssText = `
+        position: fixed; top: 0; left: 0; right: 0;
+        background: #ff9800; color: white; padding: 10px;
+        text-align: center; z-index: 999999;
+        font-family: monospace; font-size: 14px;
+      `;
+      document.body.appendChild(banner);
+    });
+    
+    for (const depPath of dependencies) {
+      try {
+        console.log(`📋 Executing dependency: ${depPath}`);
+        
+        // Import the test file dynamically
+        const absolutePath = path.resolve(depPath);
+        if (!fs.existsSync(absolutePath)) {
+          throw new Error(`Dependency file not found: ${absolutePath}`);
+        }
+        
+        // Handle TypeScript files by extracting just the run_ function
+        let testModule;
+        if (absolutePath.endsWith('.ts')) {
+          const tsSource = fs.readFileSync(absolutePath, 'utf8');
+          
+          // Extract just the run_ function using regex
+          const runFunctionMatch = tsSource.match(/export\s+async\s+function\s+(run_\w+)\s*\([^)]+\)\s*\{[\s\S]*?\n\}/);
+          
+          if (!runFunctionMatch) {
+            throw new Error(`No exported run_* function found in ${depPath}`);
+          }
+          
+          const runFunctionCode = runFunctionMatch[0];
+          const runFunctionName = runFunctionMatch[1];
+          
+          // Extract the import statement from the original file
+          const fileContent = fs.readFileSync(absolutePath, 'utf8');
+          const importMatch = fileContent.match(/import\s+.*?from\s+['"][^'"]+['"];/);
+          const importStatement = importMatch ? importMatch[0] : "import { expect } from '@playwright/test';";
+          
+          // Create a minimal TypeScript module with just the run function
+          const minimalTs = `
+            ${importStatement}
+            ${runFunctionCode}
+          `;
+          
+          // Transpile to JavaScript
+          const typescript = require('typescript');
+          const jsResult = typescript.transpile(minimalTs, {
+            target: typescript.ScriptTarget.ES2020,
+            module: typescript.ModuleKind.CommonJS,
+            allowJs: true,
+            esModuleInterop: true,
+            strict: false,
+            skipLibCheck: true
+          });
+          
+          // Create a temporary JS file
+          const tempJsPath = absolutePath.replace('.ts', '.temp.js');
+          fs.writeFileSync(tempJsPath, jsResult);
+          
+          try {
+            // Load the module using require
+            delete require.cache[require.resolve(tempJsPath)];
+            const commonjsModule = require(tempJsPath);
+            
+            // Convert CommonJS exports to ES module format
+            testModule = {};
+            if (typeof commonjsModule === 'object' && commonjsModule !== null) {
+              Object.assign(testModule, commonjsModule);
+            }
+          } finally {
+            // Clean up the temporary file
+            if (fs.existsSync(tempJsPath)) {
+              fs.unlinkSync(tempJsPath);
+            }
+          }
+        } else {
+          // For JS files, import directly
+          testModule = await import(absolutePath);
+        }
+        
+        // Find the run function (e.g., run_test_login)
+        const runFunctionName = Object.keys(testModule).find(key => 
+          key.startsWith('run_') && typeof testModule[key] === 'function'
+        );
+        
+        if (runFunctionName) {
+          console.log(`  ✓ Executing ${runFunctionName}...`);
+          await testModule[runFunctionName](page);
+          console.log(`  ✅ Completed ${runFunctionName}`);
+        } else {
+          console.error(`  ❌ No run_* function found in ${depPath}`);
+          throw new Error(`No executable function found in ${depPath}`);
+        }
+      } catch (error) {
+        console.error(`❌ Failed to run dependency ${depPath}:`, error);
+        await closeBrowser();
+        process.exit(1);
+      }
+    }
+    
+    // Remove the banner after dependencies complete
+    await page.evaluate(() => {
+      const banner = document.getElementById('__playwright_dependency_banner');
+      if (banner) banner.remove();
+    });
+    
+    console.log('✅ All dependencies completed. Starting recording from current state...');
+    
+    // If no URL was provided, use the current page URL as starting point
+    if (!url) {
+      url = await page.url();
+      console.log(`📍 Recording will continue from: ${url}`);
+    }
+    
+    // Don't close the dependency page - keep it open for recording
+    // await page.close();
+  }
+
   await context._enableRecorder({
     language,
     launchOptions,
@@ -630,7 +764,13 @@ async function codegen(options: Options & { target: string, output?: string, tes
     outputFile: outputFile ? path.resolve(outputFile) : undefined,
     handleSIGINT: false,
   });
-  await openPage(context, url);
+  
+  // Only open a new page if we don't have dependencies
+  // (dependencies already set up the page state we want to continue from)
+  if (!dependencies || dependencies.length === 0) {
+    await openPage(context, url);
+  }
+  
   donePromise.resolve();
 }
 

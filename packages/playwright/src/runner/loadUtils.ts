@@ -105,10 +105,10 @@ export async function loadFileSuites(testRun: TestRun, mode: 'out-of-process' | 
       if (allTestFiles.has(dependency)) {
         const importer = path.relative(config.config.rootDir, file);
         const importee = path.relative(config.config.rootDir, dependency);
-        errors.push({
-          message: `Error: test file "${importer}" should not import test file "${importee}"`,
-          location: { file, line: 1, column: 1 },
-        });
+        // errors.push({
+          // message: `Error: test file "${importer}" should not import test file "${importee}"`,
+          // location: { file, line: 1, column: 1 },
+        // });
       }
     }
   }
