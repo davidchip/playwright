@@ -1,5 +1,5 @@
 {
-  "name": "playwright-internal",
+  "name": "@playwright/test",
   "private": true,
   "version": "1.56.0-next",
   "description": "A high-level API to automate web browsers",
@@ -15,6 +15,9 @@
     "name": "Microsoft Corporation"
   },
   "license": "Apache-2.0",
+  "bin": {
+    "playwright": "./packages/playwright/cli.js"
+  },
   "scripts": {
     "ctest": "playwright test --config=tests/library/playwright.config.ts --project=chromium-*",
     "ftest": "playwright test --config=tests/library/playwright.config.ts --project=firefox-*",
@@ -39,6 +42,7 @@
     "flint": "concurrently \"npm run eslint\" \"npm run tsc\" \"npm run doc\" \"npm run check-deps\" \"node utils/generate_channels.js\" \"node utils/generate_types/\" \"npm run lint-tests\" \"npm run test-types\" \"npm run lint-packages\" \"node utils/doclint/linting-code-snippets/cli.js --js-only\"",
     "clean": "node utils/build/clean.js",
     "build": "node utils/build/build.js",
+    "postinstall": "npm run build",
     "watch": "node utils/build/build.js --watch --lint",
     "test-types": "node utils/generate_types/ && tsc -p utils/generate_types/test/tsconfig.json && tsc -p ./tests/",
     "roll": "node utils/roll_browser.js",
@@ -49,6 +53,13 @@
   "workspaces": [
     "packages/*"
   ],
+  "dependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.3.4",
+    "@vitejs/plugin-basic-ssl": "^1.1.0",
+    "@vitejs/plugin-react": "^4.2.1"
+  },
   "devDependencies": {
     "@actions/core": "^1.10.0",
     "@actions/github": "^6.0.0",
@@ -70,8 +81,6 @@
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
     "@typescript-eslint/utils": "^8.26.1",
-    "@vitejs/plugin-basic-ssl": "^1.1.0",
-    "@vitejs/plugin-react": "^4.2.1",
     "@zip.js/zip.js": "^2.7.29",
     "ansi-styles": "^4.3.0",
     "chokidar": "^3.5.3",
@@ -81,7 +90,6 @@
     "cross-env": "^7.0.3",
     "dotenv": "^16.4.5",
     "electron": "^30.1.2",
-    "esbuild": "^0.25.0",
     "eslint": "^9.19.0",
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-notice": "^1.0.0",
@@ -95,8 +103,6 @@
     "react": "^18.1.0",
     "react-dom": "^18.1.0",
     "ssim.js": "^3.5.0",
-    "typescript": "^5.8.2",
-    "vite": "^6.3.4",
     "ws": "^8.17.1",
     "xml2js": "^0.5.0",
     "yaml": "2.6.0"
