@@ -61,6 +61,33 @@ bundles.forEach(bundlePath => {
   }
 });
 
+// Copy package-lock.json files or create minimal ones for npm ci to work
+const lockFiles = [
+  'tests/playwright-test/stable-test-runner/package-lock.json',
+  'packages/playwright/bundles/babel/package-lock.json',
+  'packages/playwright/bundles/expect/package-lock.json', 
+  'packages/playwright/bundles/mcp/package-lock.json',
+  'packages/playwright/bundles/utils/package-lock.json',
+  'packages/playwright-core/bundles/utils/package-lock.json',
+  'packages/playwright-core/bundles/zip/package-lock.json'
+];
+
+for (const lockFile of lockFiles) {
+  const lockDir = path.dirname(lockFile);
+  const lockPath = path.join(__dirname, lockFile);
+  
+  if (!fs.existsSync(lockPath)) {
+    console.log(`Creating minimal package-lock.json for ${lockDir}`);
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+    fs.writeFileSync(lockPath, JSON.stringify({
+      "name": path.basename(lockDir),
+      "lockfileVersion": 1,
+      "requires": true,
+      "dependencies": {}
+    }, null, 2));
+  }
+}
+
 // Now run the actual build
 console.log('Running npm run build...');
 try {
