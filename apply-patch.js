@@ -6,11 +6,11 @@ const path = require('path');
 // Find the Playwright installation directory
 function findPlaywrightPath() {
   try {
-    // Try to find @playwright/test in node_modules
-    const playwrightTestPath = require.resolve('@playwright/test/package.json');
-    return path.dirname(playwrightTestPath);
+    // Try to find playwright in node_modules
+    const playwrightPath = require.resolve('playwright/package.json');
+    return path.dirname(playwrightPath);
   } catch (error) {
-    console.error('Could not find @playwright/test installation');
+    console.error('Could not find playwright installation');
     process.exit(1);
   }
 }
@@ -58,7 +58,7 @@ function main() {
   const playwrightPath = findPlaywrightPath();
   
   console.log(`Found Playwright Core at: ${playwrightCorePath}`);
-  console.log(`Found Playwright Test at: ${playwrightPath}`);
+  console.log(`Found Playwright at: ${playwrightPath}`);
 
   const patches = [
     {
@@ -66,7 +66,7 @@ function main() {
       patch: path.join(__dirname, 'patches', 'program.js')
     },
     {
-      target: path.join(playwrightPath, '../playwright/lib/runner/loadUtils.js'),
+      target: path.join(playwrightPath, 'lib', 'runner', 'loadUtils.js'),
       patch: path.join(__dirname, 'patches', 'loadUtils.js')
     }
   ];

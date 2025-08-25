@@ -1,6 +1,6 @@
 {
   "name": "@animake/playwright-patch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Patch for standard Playwright to add --after flag and test interdependency support",
   "main": "index.js",
   "scripts": {
