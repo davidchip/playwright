@@ -68,6 +68,10 @@ function main() {
     {
       target: path.join(playwrightPath, 'lib', 'runner', 'loadUtils.js'),
       patch: path.join(__dirname, 'patches', 'loadUtils.js')
+    },
+    {
+      target: path.join(playwrightCorePath, 'lib', 'server', 'recorder', 'throttledFile.js'),
+      patch: path.join(__dirname, 'patches', 'throttledFile.js')
     }
   ];
 
@@ -79,7 +83,6 @@ function main() {
   }
 
   console.log(`\n🎉 Successfully applied ${successCount}/${patches.length} patches`);
-  
   if (successCount < patches.length) {
     console.log('⚠️  Some patches failed to apply. Playwright may not work as expected.');
     process.exit(1);
